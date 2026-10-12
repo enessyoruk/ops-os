@@ -1,0 +1,270 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String   @db.VarChar(255)
+  slug           String   @unique @db.VarChar(100)
+  settings       Json     @default("{}")
+  enabledModules Json     @default("[]")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  users           User[]
+  items           Item[]
+  unitGroups      UnitGroup[]
+  units           Unit[]
+  unitConversions UnitConversion[]
+  accounts        Account[]
+  movements       MovementLedger[]
+  itemUnits       ItemUnit[]
+  itemRecipes     ItemRecipe[]
+  orders          Order[]
+  orderItems      OrderItem[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  email        String    @db.VarChar(255)
+  passwordHash String    @db.VarChar(255)
+  firstName    String    @db.VarChar(100)
+  lastName     String    @db.VarChar(100)
+  role         String    @default("STAFF") @db.VarChar(50)
+  permissions  Json      @default("[]")
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Item {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  name       String   @db.VarChar(255)
+  sku        String?  @db.VarChar(100)
+  barcode    String?  @db.VarChar(100)
+  type       String   @default("PRODUCT") @db.VarChar(50)
+  baseUnitId String   @db.Uuid
+  metadata   Json     @default("{}")
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  baseUnit  Unit             @relation("ItemBaseUnit", fields: [baseUnitId], references: [id])
+  movements MovementLedger[]
+  itemUnits ItemUnit[]
+  recipesAsParent ItemRecipe[] @relation("RecipeParent")
+  recipesAsChild  ItemRecipe[] @relation("RecipeChild")
+  orderItems      OrderItem[]
+
+  @@unique([tenantId, sku])
+  @@unique([tenantId, barcode])
+  @@index([tenantId])
+  @@index([tenantId, type])
+  @@map("items")
+}
+
+model ItemUnit {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @db.Uuid
+  itemId           String   @db.Uuid
+  unitId           String   @db.Uuid
+  conversionFactor Decimal  @db.Decimal(18, 6)
+  price            Decimal? @db.Decimal(18, 4)
+  barcode          String?  @db.VarChar(100)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  unit   Unit   @relation("ItemUnitUnit", fields: [unitId], references: [id])
+
+  @@unique([itemId, unitId])
+  @@index([tenantId])
+  @@map("item_units")
+}
+
+model UnitGroup {
+  id          String  @id @default(uuid()) @db.Uuid
+  tenantId    String  @db.Uuid
+  name        String  @db.VarChar(100)
+  description String? @db.VarChar(255)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  units  Unit[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("unit_groups")
+}
+
+model Unit {
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String  @db.Uuid
+  groupId  String  @db.Uuid
+  name     String  @db.VarChar(100)
+  symbol   String  @db.VarChar(20)
+  isBase   Boolean @default(false)
+
+  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  group  UnitGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  conversionsFrom UnitConversion[] @relation("FromUnit")
+  conversionsTo   UnitConversion[] @relation("ToUnit")
+  itemsAsBase     Item[]           @relation("ItemBaseUnit")
+  itemUnits       ItemUnit[]       @relation("ItemUnitUnit")
+  movementUnits   MovementLedger[] @relation("MovementUnit")
+  recipeUnits     ItemRecipe[]     @relation("RecipeUnit")
+  orderItems      OrderItem[]
+
+  @@unique([tenantId, groupId, name])
+  @@index([tenantId])
+  @@map("units")
+}
+
+model UnitConversion {
+  id         String  @id @default(uuid()) @db.Uuid
+  tenantId   String  @db.Uuid
+  fromUnitId String  @db.Uuid
+  toUnitId   String  @db.Uuid
+  factor     Decimal @db.Decimal(18, 6)
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  fromUnit Unit   @relation("FromUnit", fields: [fromUnitId], references: [id])
+  toUnit   Unit   @relation("ToUnit", fields: [toUnitId], references: [id])
+
+  @@unique([tenantId, fromUnitId, toUnitId])
+  @@index([tenantId])
+  @@map("unit_conversions")
+}
+
+model Account {
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String  @db.Uuid
+  name     String  @db.VarChar(255)
+  type     String  @db.VarChar(50)
+  code     String? @db.VarChar(50)
+  metadata Json    @default("{}")
+  isActive Boolean @default(true)
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  movements MovementLedger[]
+  orders    Order[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([tenantId, type])
+  @@map("accounts")
+}
+
+model MovementLedger {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  itemId        String?  @db.Uuid
+  accountId     String?  @db.Uuid
+  movementType  String   @db.VarChar(50)
+  direction     String   @db.VarChar(3)
+  quantity      Decimal  @db.Decimal(18, 4)
+  unitId        String   @db.Uuid
+  unitCost      Decimal  @db.Decimal(18, 4)
+  totalAmount   Decimal  @db.Decimal(18, 4)
+  balanceAfter  Decimal? @db.Decimal(18, 4)
+  referenceId   String?  @db.Uuid
+  referenceType String?  @db.VarChar(50)
+  description   String?  @db.VarChar(500)
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  item    Item?    @relation(fields: [itemId], references: [id])
+  account Account? @relation(fields: [accountId], references: [id])
+  unit    Unit     @relation("MovementUnit", fields: [unitId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, itemId])
+  @@index([tenantId, accountId])
+  @@index([tenantId, movementType])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, referenceId, referenceType])
+  @@map("movement_ledger")
+}
+
+model ItemRecipe {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  parentItemId   String   @db.Uuid
+  childItemId    String   @db.Uuid
+  quantity       Decimal  @db.Decimal(18, 6)
+  unitId         String   @db.Uuid
+  createdAt      DateTime @default(now())
+
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parentItem   Item   @relation("RecipeParent", fields: [parentItemId], references: [id], onDelete: Cascade)
+  childItem    Item   @relation("RecipeChild", fields: [childItemId], references: [id], onDelete: Restrict)
+  unit         Unit   @relation("RecipeUnit", fields: [unitId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, parentItemId, childItemId])
+  @@index([tenantId])
+  @@index([tenantId, parentItemId])
+  @@map("item_recipes")
+}
+
+model Order {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  accountId   String   @db.Uuid
+  type        String   @db.VarChar(50)
+  status      String   @default("DRAFT") @db.VarChar(50)
+  orderNumber String   @db.VarChar(100)
+  totalAmount Decimal  @default(0) @db.Decimal(18, 4)
+  notes       String?  @db.VarChar(500)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account Account     @relation(fields: [accountId], references: [id])
+  items   OrderItem[]
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId])
+  @@index([tenantId, type])
+  @@index([tenantId, accountId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  orderId     String   @db.Uuid
+  itemId      String   @db.Uuid
+  quantity    Decimal  @db.Decimal(18, 4)
+  unitId      String   @db.Uuid
+  unitPrice   Decimal  @db.Decimal(18, 4)
+  totalPrice  Decimal  @db.Decimal(18, 4)
+  unitCost    Decimal? @db.Decimal(18, 4)
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  item    Item   @relation(fields: [itemId], references: [id])
+  unit    Unit   @relation(fields: [unitId], references: [id])
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@map("order_items")
+}

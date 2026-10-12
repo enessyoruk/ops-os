@@ -1,64 +1,65 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
+import { useState, useEffect } from "react";
+import { useSession, signOut } from "next-auth/react";
+import { trpc } from "@/lib/trpc";
+import { LoginScreen } from "@/components/LoginScreen";
+import { Sidebar } from "@/components/Sidebar";
+import { DashboardView } from "@/components/views/DashboardView";
+import { ItemsView } from "@/components/views/ItemsView";
+import { MovementsView } from "@/components/views/MovementsView";
+import { AccountsView } from "@/components/views/AccountsView";
+import { UnitsView } from "@/components/views/UnitsView";
+import { OrdersView } from "@/components/views/OrdersView";
 
-export default function Home() {
+const VIEW_TITLES: Record<string, string> = {
+  dashboard: "Genel Bakış", orders: "Siparişler", items: "Ürünler", movements: "Hareket Defteri",
+  accounts: "Hesaplar", units: "Birimler & Dönüşümler",
+};
+
+export default function Page() {
+  const { data: session, status } = useSession();
+  const [view, setView] = useState("dashboard");
+  const [collapsed, setCollapsed] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
+
+  if (status === "loading") return <div style={{ height: "100vh", background: "#05060a" }}></div>;
+  if (!session?.user?.tenantId) return <LoginScreen />;
+
+  const tenantId = session.user.tenantId;
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
+    <div className="app">
+      <Sidebar active={view} onNavigate={setView} collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      <main className={`main${collapsed ? " shifted" : ""}`}>
+        <header className="topbar">
+          <h1 className="topbar-title">{VIEW_TITLES[view]}</h1>
+          <div className="topbar-right">
+            <button
+              className="theme-toggle"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              title={theme === "dark" ? "Aydınlık mod" : "Karanlık mod"}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+              <div className={`theme-dot${theme === "light" ? " light" : ""}`}>
+                {theme === "dark" ? "🌙" : "☀️"}
+              </div>
+            </button>
+            <button className="btn-logout" onClick={() => signOut()} title="Çıkış Yap">
+              <span className="logout-icon">⏻</span>
+              <span className="logout-text">Çıkış</span>
+            </button>
+          </div>
+        </header>
+        <div className="page" key={view}>
+          {view === "dashboard" && <DashboardView tenantId={tenantId} />}
+          {view === "orders" && <OrdersView tenantId={tenantId} />}
+          {view === "items" && <ItemsView tenantId={tenantId} />}
+          {view === "movements" && <MovementsView tenantId={tenantId} />}
+          {view === "accounts" && <AccountsView tenantId={tenantId} />}
+          {view === "units" && <UnitsView tenantId={tenantId} />}
         </div>
       </main>
     </div>
